@@ -24,7 +24,6 @@ export const postCreateValidation = [
   body('email', 'Неверный формат email').isEmail(),
   body('abstract', 'Добавьте аннотацию').isString().notEmpty(),
   body('keywords', 'Ключевые слова должны быть массивом').optional().isArray(),
-  body('content', 'Текст статьи обязателен').isString().notEmpty(),
   body('literature', 'Список литературы обязателен').isArray(),
 ];
 

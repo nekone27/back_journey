@@ -10,6 +10,7 @@ import * as  UserController from './Controllers/UserController.js';
 import * as  PostController from './Controllers/PostController.js';
 import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
+import path from 'path';
 import * as DocumentController from './Controllers/DocumentController.js';
 
 
@@ -27,8 +28,19 @@ const documentStorage = multer.diskStorage({
   destination: (_, __, cb) => {
     cb(null, 'uploads/documents');
   },
-  filename: (_, file, cb) => {
-    const uniqueName = `${uuidv4()}.${file.originalname.split('.').pop()}`;
+  filename: (req, file, cb) => {
+    // Декодируем имя файла из latin1 в UTF-8
+    const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+    
+    // Получаем расширение файла
+    const ext = path.extname(originalName);
+    
+    // Создаем уникальное имя файла
+    const uniqueName = `${uuidv4()}${ext}`;
+    
+    // Сохраняем оригинальное имя в объекте файла для последующего использования
+    file.decodedOriginalName = originalName;
+    
     cb(null, uniqueName);
   },
 });
@@ -60,7 +72,7 @@ app.post('/auth/register', RegisterValidator, UserController.register);
 app.post('/auth/me', checkAuth, UserController.getMe );
 
 
-
+app.get('/posts/search', PostController.search); 
 app.get('/posts', PostController.getAll);     //vse stati
 app.get('/posts/:id', PostController.getOne);  //odna statya
 app.post('/posts', checkAuth, postCreateValidation, PostController.create);  //sozdanie ststi

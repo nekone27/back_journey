@@ -1,5 +1,6 @@
 import PostModel from '../models/post.js';
 import mongoose from 'mongoose';
+import DocumentModel from '../models/document.js';
 
 export const getLastTags = async (req, res) => {
   try {
@@ -35,7 +36,7 @@ export const getOne = async (req, res) => {
   try {
     const postId = req.params.id;
 
-    // Проверка валидности ID
+   
     if (!mongoose.Types.ObjectId.isValid(postId)) {
       return res.status(400).json({ message: "Неверный ID статьи" });
     }
@@ -44,7 +45,7 @@ export const getOne = async (req, res) => {
     const post = await PostModel.findOneAndUpdate(
       { _id: postId },
       { $inc: { viewsCount: 1 } },
-      { new: true } // Возвращает обновленный документ
+      { new: true } 
     ).populate('user');
 
     if (!post) {
@@ -61,28 +62,31 @@ export const getOne = async (req, res) => {
   }
 };
 
-// Controllers/PostController.js
+
 export const remove = async (req, res) => {
   try {
     const postId = req.params.id;
 
-    // Проверка валидности ID
     if (!mongoose.Types.ObjectId.isValid(postId)) {
       return res.status(400).json({ message: "Неверный формат ID" });
     }
 
-    // Найти пост и проверить, что пользователь является автором
     const post = await PostModel.findById(postId);
     if (!post) {
       return res.status(404).json({ message: "Статья не найдена" });
     }
 
-    // Проверка прав доступа: только автор может удалить пост
     if (post.user.toString() !== req.userId) {
       return res.status(403).json({ message: "Нет прав для удаления" });
     }
 
-    // Удаление поста
+    // Освобождаем документ
+    await DocumentModel.findByIdAndUpdate(
+      post.documentId,
+      { postId: null }
+    );
+
+    // Удаляем статью
     await PostModel.findByIdAndDelete(postId);
     res.json({ success: true });
 
@@ -94,8 +98,27 @@ export const remove = async (req, res) => {
     });
   }
 };
-export const create = async (req, res) => {
-  try {
+
+  export const create = async (req, res) => {
+    try {
+      // Проверяем, что документ существует и принадлежит пользователю
+      const document = await DocumentModel.findOne({
+        _id: req.body.documentId,
+        author: req.userId
+      });
+  
+      if (!document) {
+        return res.status(400).json({
+          message: 'Документ не найден или вы не являетесь его автором'
+        });
+      }
+  
+      // Проверяем, что документ еще не привязан к статье
+      if (document.postId) {
+        return res.status(400).json({
+          message: 'Этот документ уже привязан к другой статье'
+        });
+      }
     // Создаем документ статьи
     const doc = new PostModel({
       title: req.body.title,
@@ -105,23 +128,60 @@ export const create = async (req, res) => {
       email: req.body.email,
       abstract: req.body.abstract,
       keywords: req.body.keywords,
-      content: req.body.content,
+      documentId: req.body.documentId,
       literature: req.body.literature,
-      user: req.userId // Привязка к автору
+      user: req.userId
     });
 
     // Сохраняем статью в базе
     const post = await doc.save();
+
+    // Обновляем документ, добавляя связь со статьей
+    await DocumentModel.findByIdAndUpdate(
+      req.body.documentId,
+      { postId: post._id }
+    );
     
-    // Возвращаем созданную статью
     res.status(201).json(post);
-    
   } catch (err) {
-    // Обработка ошибок
     console.error('Ошибка создания статьи:', err);
     res.status(500).json({
       message: 'Не удалось создать статью',
       error: err.message
+    });
+  }
+};
+export const search = async (req, res) => {
+  try {
+    const { query, author, keywords } = req.query;
+    let searchQuery = {};
+
+    // Полнотекстовый поиск
+    if (query) {
+      searchQuery.$text = { $search: query };
+    }
+
+    // Поиск по автору
+    if (author) {
+      searchQuery.authors = { $regex: author, $options: 'i' };
+    }
+
+    // Поиск по ключевым словам
+    if (keywords) {
+      const keywordArray = keywords.split(',').map(k => k.trim());
+      searchQuery.keywords = { $in: keywordArray };
+    }
+    const posts = await PostModel
+      .find(searchQuery)
+      .populate('user')
+      .populate('documentId')
+      .sort({ createdAt: -1 });
+
+    res.json(posts);
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({
+      message: 'Ошибка поиска',
     });
   }
 };

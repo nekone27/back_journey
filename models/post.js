@@ -6,35 +6,36 @@ const PostSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    authors: {  // Добавлено поле "Авторы"
+    authors: { 
       type: String,
       required: true,
     },
-    position: {  // Добавлено поле "Должность"
+    position: {  
       type: String,
       required: true,
     },
-    organization: {  // Добавлено поле "Организация"
+    organization: {  
       type: String,
       required: true,
     },
-    email: {  // Добавлено поле "Email"
+    email: {  
       type: String,
       required: true,
     },
-    abstract: {  // Добавлено поле "Аннотация"
+    abstract: {  
       type: String,
       required: true,
     },
-    keywords: {  // Изменено на массив ключевых слов
+    keywords: {  
       type: [String],
       default: [],
     },
-    content: {  // Переименовано из "text"
-      type: String,
+    documentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Document',
       required: true,
     },
-    literature: {  // Добавлено поле "Литература"
+    literature: {  
       type: [String],
       required: true,
     },
@@ -53,5 +54,6 @@ const PostSchema = new mongoose.Schema(
     timestamps: true,
   },
 );
+PostSchema.index({ title: 'text', authors: 'text', abstract: 'text', keywords: 'text' });
 
 export default mongoose.model('Post', PostSchema);
