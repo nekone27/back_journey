@@ -23,36 +23,27 @@ const app = express();
 
 
 
-// Конфигурация Multer для документов
-const documentStorage = multer.diskStorage({
+
+const articleStorage = multer.diskStorage({
   destination: (_, __, cb) => {
-    cb(null, 'uploads/documents');
+    cb(null, 'uploads/documents'); // Используем ту же папку
   },
   filename: (req, file, cb) => {
-    // Декодируем имя файла из latin1 в UTF-8
     const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-    
-    // Получаем расширение файла
     const ext = path.extname(originalName);
-    
-    // Создаем уникальное имя файла
     const uniqueName = `${uuidv4()}${ext}`;
-    
-    // Сохраняем оригинальное имя в объекте файла для последующего использования
     file.decodedOriginalName = originalName;
-    
     cb(null, uniqueName);
   },
 });
 
-const uploadDocument = multer({ 
-  storage: documentStorage,
+const uploadArticle = multer({ 
+  storage: articleStorage,
   fileFilter: (_, file, cb) => {
-    if (file.mimetype === 'application/msword' || 
-        file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+    if (file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
       cb(null, true);
     } else {
-      cb(new Error('Только .doc и .docx файлы разрешены'), false);
+      cb(new Error('Только .docx файлы разрешены'), false);
     }
   },
   limits: { fileSize: 10 * 1024 * 1024 }
@@ -75,16 +66,16 @@ app.post('/auth/me', checkAuth, UserController.getMe );
 app.get('/posts/search', PostController.search); 
 app.get('/posts', PostController.getAll);     //vse stati
 app.get('/posts/:id', PostController.getOne);  //odna statya
-app.post('/posts', checkAuth, postCreateValidation, PostController.create);  //sozdanie ststi
+app.post('/posts', checkAuth, uploadArticle.single('file'), postCreateValidation, PostController.create);  //sozdanie ststi
 
 app.delete('/posts/:id', checkAuth, PostController.remove);  //udalenie
 app.patch('/posts/:id', checkAuth, PostController.update); // obnovlenie
 
 
-app.post('/documents', checkAuth, uploadDocument.single('file'), DocumentController.uploadDocument);
-app.get('/documents', checkAuth, DocumentController.getAllDocuments);
-app.get('/documents/:id', checkAuth, DocumentController.downloadDocument);
-app.delete('/documents/:id', checkAuth, DocumentController.deleteDocument);
+// app.post('/documents', checkAuth, uploadDocument.single('file'), DocumentController.uploadDocument);
+// app.get('/documents', checkAuth, DocumentController.getAllDocuments);
+// app.get('/documents/:id', checkAuth, DocumentController.downloadDocument);
+// app.delete('/documents/:id', checkAuth, DocumentController.deleteDocument);
 
 
 app.listen(4444, (err) => {  

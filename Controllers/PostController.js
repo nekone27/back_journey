@@ -99,58 +99,90 @@ export const remove = async (req, res) => {
   }
 };
 
-  export const create = async (req, res) => {
-    try {
-      // Проверяем, что документ существует и принадлежит пользователю
-      const document = await DocumentModel.findOne({
-        _id: req.body.documentId,
-        author: req.userId
+export const create = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  
+  try {
+    // Проверяем наличие файла
+    if (!req.file) {
+      return res.status(400).json({
+        message: 'Необходимо загрузить файл статьи в формате .docx'
       });
-  
-      if (!document) {
-        return res.status(400).json({
-          message: 'Документ не найден или вы не являетесь его автором'
-        });
-      }
-  
-      // Проверяем, что документ еще не привязан к статье
-      if (document.postId) {
-        return res.status(400).json({
-          message: 'Этот документ уже привязан к другой статье'
-        });
-      }
+    }
+
+    // Декодируем имя файла
+    const decodedFilename = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
+
+    // Создаем документ
+    const document = new DocumentModel({
+      filename: decodedFilename,
+      path: req.file.path,
+      author: req.userId,
+    });
+    const savedDocument = await document.save({ session });
+
+    // Парсим массивы из строк (так как multipart отправляет все как строки)
+    let keywords = [];
+    let literature = [];
+    
+    try {
+      keywords = req.body.keywords ? JSON.parse(req.body.keywords) : [];
+      literature = req.body.literature ? JSON.parse(req.body.literature) : [];
+    } catch (e) {
+      // Если не JSON, пробуем разделить по запятым
+      keywords = req.body.keywords ? req.body.keywords.split(',').map(k => k.trim()) : [];
+      literature = req.body.literature ? req.body.literature.split(',').map(l => l.trim()) : [];
+    }
     // Создаем документ статьи
-    const doc = new PostModel({
+    const post = new PostModel({
       title: req.body.title,
       authors: req.body.authors,
       position: req.body.position,
       organization: req.body.organization,
       email: req.body.email,
       abstract: req.body.abstract,
-      keywords: req.body.keywords,
-      documentId: req.body.documentId,
-      literature: req.body.literature,
+      keywords: keywords,
+      documentId: savedDocument._id,
+      literature: literature,
       user: req.userId
     });
 
-    // Сохраняем статью в базе
-    const post = await doc.save();
+    const savedPost = await post.save({ session });
 
-    // Обновляем документ, добавляя связь со статьей
-    await DocumentModel.findByIdAndUpdate(
-      req.body.documentId,
-      { postId: post._id }
-    );
+    // Обновляем документ
+    savedDocument.postId = savedPost._id;
+    await savedDocument.save({ session });
+
+    await session.commitTransaction();
     
-    res.status(201).json(post);
-  } catch (err) {
+    res.status(201).json({
+      success: true,
+      post: savedPost,
+      document: savedDocument
+    });
+    } catch (err) {
+    await session.abortTransaction();
+    // Удаляем файл при ошибке
+    if (req.file && req.file.path) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (e) {
+        console.error('Ошибка удаления файла:', e);
+      }
+    }
+    
     console.error('Ошибка создания статьи:', err);
     res.status(500).json({
       message: 'Не удалось создать статью',
       error: err.message
     });
+  } finally {
+    session.endSession();
   }
 };
+
+   
 export const search = async (req, res) => {
   try {
     const { query, author, keywords } = req.query;
